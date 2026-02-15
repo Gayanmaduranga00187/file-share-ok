@@ -186,5 +186,7 @@ def delete_file(filename):
         os.remove(file_path)
     return redirect(url_for("upload_file"))
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if _name_ == "_main_":
+    # Render එකෙන් දෙන Port එක auto ගන්නවා, නැත්නම් 10000 පාවිච්චි කරනවා
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
