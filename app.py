@@ -1,14 +1,17 @@
 from flask import Flask, request, render_template_string, send_from_directory, redirect, url_for
 import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-# Save Uploaded Files to 'uploads' Folder
+# Uploads ලබාගන්නා Folder එක සැකසීම
 UPLOAD_FOLDER = "uploads"
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# Modified HTML Template with Upload Progress
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# HTML Template එක
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -18,78 +21,67 @@ HTML_TEMPLATE = '''
     <title>File Share App</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(to bottom, #1e90ff, #f0e68c);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #74ebd5 0%, #9face6 100%);
             color: #333;
             padding: 20px;
             text-align: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            margin: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
         header {
+            border-bottom: 2px solid #eee;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+        }
+        .creator { font-size: 12px; color: #777; margin-top: 5px; }
+        h2 { color: #2c3e50; }
+        form { margin: 20px 0; }
+        ul { list-style: none; padding: 0; text-align: left; }
+        li { 
+            background: #fff; 
+            margin: 10px 0; 
+            padding: 10px; 
+            border-radius: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 10px;
-            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
-        header img {
-            height: 50px;
-        }
-        header .creator {
-            font-size: 14px;
-            color: #555;
-        }
-        h2 {
-            color: #d9534f;
-        }
-        form {
-            margin: 20px 0;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            margin: 5px 0;
-        }
-        a {
-            text-decoration: none;
-            color: #337ab7;
-        }
-        button {
-            margin-left: 10px;
-            background-color: #d9534f;
-            color: white;
+        button, .btn {
+            padding: 8px 15px;
             border: none;
-            padding: 5px 10px;
+            border-radius: 5px;
             cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            transition: 0.3s;
         }
-        button:hover {
-            background-color: #c9302c;
-        }
-        .download-btn {
-            background-color: #5cb85c;
-        }
-        .download-btn:hover {
-            background-color: #4cae4c;
-        }
-        input[type="file"] {
-            margin: 10px 0;
-        }
+        .upload-btn { background: #3498db; color: white; }
+        .delete-btn { background: #e74c3c; color: white; margin-left: 5px; }
+        .download-btn { background: #2ecc71; color: white; }
+        
         #progress {
             width: 100%;
             background-color: #f3f3f3;
             border-radius: 5px;
-            overflow: hidden;
             margin: 20px 0;
+            display: none;
         }
         #progress-bar {
             height: 20px;
             width: 0;
-            background-color: #4caf50;
+            background-color: #2ecc71;
             text-align: center;
             color: white;
+            border-radius: 5px;
             line-height: 20px;
             font-size: 12px;
         }
@@ -100,6 +92,8 @@ HTML_TEMPLATE = '''
             let form = document.getElementById('upload-form');
             let formData = new FormData(form);
             let xhr = new XMLHttpRequest();
+
+            document.getElementById('progress').style.display = 'block';
 
             xhr.open('POST', '/');
 
@@ -116,77 +110,76 @@ HTML_TEMPLATE = '''
                 if (xhr.status === 200) {
                     location.reload();
                 } else {
-                    alert('An error occurred!');
+                    alert('Error uploading file!');
                 }
             };
-
             xhr.send(formData);
         }
     </script>
 </head>
 <body>
-    <header>
-        <img src="logo.png" alt="App Logo"> <!-- Replace with your logo file -->
-        <div class="creator">Created by Gayan Maduranga</div>
-    </header>
+    <div class="container">
+        <header>
+            <h2>File Share App</h2>
+            <div class="creator">Created by Gayan Maduranga</div>
+        </header>
 
-    <h2>Upload Files</h2>
-    <form id="upload-form" enctype="multipart/form-data" onsubmit="uploadFiles(event)">
-        <input type="file" name="file" multiple>
-        <button type="submit">Upload</button>
-    </form>
-    <div id="progress">
-        <div id="progress-bar">0%</div>
+        <form id="upload-form" enctype="multipart/form-data" onsubmit="uploadFiles(event)">
+            <input type="file" name="file" multiple required>
+            <button type="submit" class="upload-btn">Upload</button>
+        </form>
+
+        <div id="progress">
+            <div id="progress-bar">0%</div>
+        </div>
+
+        <h3>Uploaded Files</h3>
+        <ul>
+            {% for file in files %}
+            <li>
+                <span style="word-break: break-all;">{{ file }}</span>
+                <div>
+                    <a href="/download/{{ file }}" class="btn download-btn">Download</a>
+                    <form method="POST" action="/delete/{{ file }}" style="display:inline;">
+                        <button type="submit" class="delete-btn">Delete</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
     </div>
-
-    <h2>Uploaded Files</h2>
-    <ul>
-        {% for file in files %}
-        <li>
-            <a href="/uploads/{{ file }}" target="_blank">{{ file }}</a>
-            <form method="POST" action="/delete/{{ file }}" style="display:inline;">
-                <button type="submit">Delete</button>
-            </form>
-            <a href="/download/{{ file }}">
-                <button class="download-btn">Download</button>
-            </a>
-        </li>
-        {% endfor %}
-    </ul>
 </body>
 </html>
 '''
 
-# Home Route for File Upload
+# Home Route
 @app.route("/", methods=["GET", "POST"])
 def upload_file():
     if request.method == "POST":
         uploaded_files = request.files.getlist("file")
         for file in uploaded_files:
-            if file:
-                file.save(os.path.join(UPLOAD_FOLDER, file.filename))
-    files = os.listdir(UPLOAD_FOLDER)
+            if file and file.filename != '':
+                filename = secure_filename(file.filename) # ආරක්ෂාව සඳහා filename එක සකසයි
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        return "OK", 200 # JS එකට සාර්ථක බව දැනුම් දෙයි
+
+    files = os.listdir(app.config['UPLOAD_FOLDER'])
     return render_template_string(HTML_TEMPLATE, files=files)
 
-# Route to Serve Uploaded Files
-@app.route("/uploads/<filename>")
-def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
-
-# Route to Download a File
+# Download Route
 @app.route("/download/<filename>")
 def download_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
-# Route to Delete a File
+# Delete Route
 @app.route("/delete/<filename>", methods=["POST"])
 def delete_file(filename):
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     if os.path.exists(file_path):
         os.remove(file_path)
     return redirect(url_for("upload_file"))
 
-if _name_ == "_main_":
-    # Render එකෙන් දෙන Port එක auto ගන්නවා, නැත්නම් 10000 පාවිච්චි කරනවා
+if __name__ == "__main__":
+    # Render හෝ වෙනත් Hosting එකකදී දෙන Port එක ලබා ගැනීම
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
